@@ -1,0 +1,17 @@
+# Build
+androidApp/.gradle/
+androidApp/androidApp/build/
+androidApp/build/
+androidApp/gradle/
+
+# IDE
+temp_auto_push.bat
+androidApp/.idea/
+.idea/
+
+# APK
+*.apk
+
+# OS
+.DS_Store.gitignore
+branch_structure.json
