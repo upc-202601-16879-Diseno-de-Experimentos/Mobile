@@ -1,5 +1,8 @@
 package com.matchpoint.mobile
 
+import org.json.JSONArray
+import org.json.JSONObject
+
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -36,7 +39,7 @@ class ApiService(private val baseUrl: String = "https://matchpoint-api-productio
         val response = makeRequest("/authentication/sign-in", "POST", json)
         response?.let {
             try {
-                val jsonObject = org.json.JSONObject(it)
+                val jsonObject = JSONObject(it)
                 val token = jsonObject.optString("token", null)
                 val id = jsonObject.optLong("id", 0L)
                 val user = jsonObject.optString("username", "")
@@ -58,13 +61,13 @@ class ApiService(private val baseUrl: String = "https://matchpoint-api-productio
     }
 
     suspend fun signUp(username: String, password: String, name: String, email: String, phone: String): Boolean = withContext(Dispatchers.IO) {
-        val json = org.json.JSONObject().apply {
+        val json = JSONObject().apply {
             put("username", username)
             put("password", password)
             put("name", name)
             put("email", email)
             put("phone", phone)
-            put("roles", org.json.JSONArray().put("ROLE_USER"))
+            put("roles", JSONArray().put("ROLE_USER"))
         }.toString()
         val response = makeRequest("/authentication/sign-up", "POST", json)
         response != null && response.contains("id")
@@ -113,7 +116,7 @@ class ApiService(private val baseUrl: String = "https://matchpoint-api-productio
         val response = makeRequest("/user-profiles")
         if (response == null || !response.startsWith("[")) return@withContext null
         try {
-            val array = org.json.JSONArray(response)
+            val array = JSONArray(response)
             for (i in 0 until array.length()) {
                 val obj = array.getJSONObject(i)
                 if (obj.optString("email") == email) {
@@ -188,7 +191,7 @@ class ApiService(private val baseUrl: String = "https://matchpoint-api-productio
         val coaches = mutableListOf<Coach>()
         if (!json.startsWith("[")) return coaches
         try {
-            val array = org.json.JSONArray(json)
+            val array = JSONArray(json)
             for (i in 0 until array.length()) {
                 val obj = array.getJSONObject(i)
                 coaches.add(Coach(
@@ -217,7 +220,7 @@ class ApiService(private val baseUrl: String = "https://matchpoint-api-productio
         val services = mutableListOf<CoachService>()
         if (!json.startsWith("[")) return services
         try {
-            val array = org.json.JSONArray(json)
+            val array = JSONArray(json)
             for (i in 0 until array.length()) {
                 val obj = array.getJSONObject(i)
                 services.add(CoachService(
@@ -236,7 +239,7 @@ class ApiService(private val baseUrl: String = "https://matchpoint-api-productio
         val bookings = mutableListOf<Booking>()
         if (!json.startsWith("[")) return bookings
         try {
-            val array = org.json.JSONArray(json)
+            val array = JSONArray(json)
             for (i in 0 until array.length()) {
                 val obj = array.getJSONObject(i)
                 
