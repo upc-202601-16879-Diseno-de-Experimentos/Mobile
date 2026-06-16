@@ -228,19 +228,10 @@ Button(
 
             composable("coaches") {
                 var coaches by remember { mutableStateOf<List<Coach>>(emptyList()) }
-                var search by remember { mutableStateOf("") }
-                var sport by remember { mutableStateOf("") }
                 LaunchedEffect(Unit) { coaches = api.getCoaches() }
 
                 Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
                     Text("Nuestros Coaches", fontWeight = FontWeight.ExtraBold, fontSize = 28.sp, color = NavyText, modifier = Modifier.padding(bottom = 16.dp))
-                    
-                    Row(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
-                        OutlinedTextField(value = search, onValueChange = { search = it }, label = { Text("Ubicación") }, shape = InputShape, modifier = Modifier.weight(1f), colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = WhiteSurface, focusedContainerColor = WhiteSurface))
-                        Spacer(Modifier.width(8.dp))
-                        OutlinedTextField(value = sport, onValueChange = { sport = it }, label = { Text("Deporte") }, shape = InputShape, modifier = Modifier.weight(1f), colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = WhiteSurface, focusedContainerColor = WhiteSurface))
-                    }
-                    Button(onClick = { scope.launch { coaches = api.searchCoaches(if (sport.isNotBlank()) sport else null, if (search.isNotBlank()) search else null, null, null) } }, modifier = Modifier.fillMaxWidth().height(50.dp), shape = ButtonShape, colors = ButtonDefaults.buttonColors(containerColor = Terracotta)) { Text("BUSCAR", fontWeight = FontWeight.Bold) }
                     Spacer(Modifier.height(16.dp))
                     
                     coaches.forEach { coach ->
