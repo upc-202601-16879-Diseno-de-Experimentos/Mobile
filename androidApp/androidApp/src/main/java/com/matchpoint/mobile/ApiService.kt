@@ -8,7 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.IOException
 
-class ApiService(private val baseUrl: String = "http://10.0.2.2:10000/api/v1") {
+class ApiService(private val baseUrl: String = "https://matchpoint-api-production-9e17.up.railway.app/api/v1") {
     private val client = OkHttpClient()
     private var token: String? = null
 
