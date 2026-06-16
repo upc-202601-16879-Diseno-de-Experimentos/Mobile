@@ -189,18 +189,20 @@ Button(
                                         val userPhoneVal = phone.ifBlank { "999999999" }
                                         val signUpSuccess = api.signUp(username, password, name, userEmailVal, userPhoneVal)
                                         if (signUpSuccess) {
-                                            val profileCreated = api.createUserProfile(name, userEmailVal, userPhoneVal)
-                                            if (profileCreated) {
-                                                val prefs = navController.context.getSharedPreferences("MatchPoint", android.content.Context.MODE_PRIVATE)
-                                                prefs.edit().putString(username, userEmailVal).apply()
+                                            // 1. Log in immediately to get the token BEFORE creating the profile
+                                            val loginResp = api.login(username, password)
+                                            if (loginResp != null) {
+                                                token = loginResp.token
+                                                userId = loginResp.id
+                                                currentUsername = username
+                                                userEmail = userEmailVal
+                                                api.setToken(loginResp.token)
                                                 
-                                                val loginResp = api.login(username, password)
-                                                if (loginResp != null) {
-                                                    token = loginResp.token
-                                                    userId = loginResp.id
-                                                    currentUsername = username
-                                                    userEmail = userEmailVal
-                                                    api.setToken(loginResp.token)
+                                                // 2. Now create the profile with the token
+                                                val profileCreated = api.createUserProfile(name, userEmailVal, userPhoneVal)
+                                                if (profileCreated) {
+                                                    val prefs = navController.context.getSharedPreferences("MatchPoint", android.content.Context.MODE_PRIVATE)
+                                                    prefs.edit().putString(username, userEmailVal).apply()
                                                     
                                                     // Get userProfile for booking
                                                     var profile = api.getUserProfile(userEmailVal)
@@ -209,9 +211,9 @@ Button(
                                                     }
                                                     
                                                     navController.navigate("courts") { popUpTo("login") { inclusive = true } }
-                                                } else { error = "Registro ok, haz login" }
-                                            } else { error = "Error al crear perfil" }
-                                        } else { error = "Error al registrar" }
+                                                } else { error = "Error al crear perfil (registrado ok)" }
+                                            } else { error = "Registro ok, pero falló login automático" }
+                                        } else { error = "Error al registrar usuario" }
                                     }
                                 }
                             }, modifier = Modifier.fillMaxWidth().height(56.dp), shape = ButtonShape, colors = ButtonDefaults.buttonColors(containerColor = Terracotta)) { Text("REGISTRARSE", fontWeight = FontWeight.Bold) }
