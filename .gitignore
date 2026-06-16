@@ -1,0 +1,15 @@
+# Build
+androidApp/.gradle/
+androidApp/androidApp/build/
+androidApp/build/
+androidApp/gradle/
+
+# IDE
+androidApp/.idea/
+.idea/
+
+# APK
+*.apk
+
+# OS
+.DS_Store
