@@ -23,6 +23,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.launch
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
 
 // Design System Tokens (Cálido y Acogedor)
 val WarmBackground = Color(0xFFFFF9F5)
@@ -144,6 +150,59 @@ fun MatchPointApp() {
                 var password by remember { mutableStateOf("") }
                 var error by remember { mutableStateOf<String?>(null) }
 
+                val context = LocalContext.current
+                val gso = remember {
+                    GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                        .requestIdToken("203684276873-gfrrh4brb30rguelmebrvn279isg4k77.apps.googleusercontent.com")
+                        .requestEmail()
+                        .build()
+                }
+                val googleSignInClient = remember {
+                    GoogleSignIn.getClient(context, gso)
+                }
+
+                val googleSignInLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.StartActivityForResult()
+                ) { result ->
+                    val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+                    try {
+                        val account = task.getResult(ApiException::class.java)
+                        val idToken = account?.idToken
+                        if (idToken != null) {
+                            scope.launch {
+                                val resp = api.loginWithGoogle(idToken, "ROLE_USER")
+                                if (resp != null) {
+                                    token = resp.token
+                                    userId = resp.id
+                                    currentUsername = account.email ?: "google-user"
+                                    userEmail = account.email ?: "google-user"
+                                    api.setToken(resp.token)
+                                    
+                                    try {
+                                        val nameToUse = account.displayName ?: (account.email?.substringBefore("@") ?: "Google Athlete")
+                                        api.createUserProfile(nameToUse, account.email ?: "", "999999999")
+                                    } catch (e: Exception) {}
+                                    
+                                    try {
+                                        val profile = api.getUserProfile(account.email ?: "")
+                                        if (profile != null) {
+                                            userId = profile.id
+                                        }
+                                    } catch (e: Exception) {}
+                                    
+                                    navController.navigate("coaches") { popUpTo("login") { inclusive = true } }
+                                } else {
+                                    error = "Error al autenticar token con el servidor"
+                                }
+                            }
+                        } else {
+                            error = "No se recibió ID Token de Google"
+                        }
+                    } catch (e: ApiException) {
+                        error = "Google Sign-In falló: ${e.statusCode}"
+                    }
+                }
+
                 Column(modifier = Modifier.fillMaxSize().padding(32.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("🎾 MatchPoint", fontWeight = FontWeight.ExtraBold, fontSize = 36.sp, color = Terracotta, modifier = Modifier.padding(bottom = 32.dp))
                     
@@ -202,6 +261,131 @@ Button(
                                 shape = ButtonShape,
                                 colors = ButtonDefaults.buttonColors(containerColor = Terracotta)
                             ) { Text("ENTRAR", fontSize = 16.sp, fontWeight = FontWeight.Bold) }
+
+                            Spacer(Modifier.height(12.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Divider(modifier = Modifier.weight(1f), color = Color.LightGray)
+                                Text("O", modifier = Modifier.padding(horizontal = 8.dp), fontSize = 12.sp, color = Color.Gray)
+                                Divider(modifier = Modifier.weight(1f), color = Color.LightGray)
+                            }
+                            Spacer(Modifier.height(12.dp))
+
+                            var showGoogleMockDialog by remember { mutableStateOf(false) }
+
+                            Button(
+                                onClick = { 
+                                    // Trigger native Google Sign-in flow
+                                    googleSignInLauncher.launch(googleSignInClient.signInIntent)
+                                },
+                                modifier = Modifier.fillMaxWidth().height(56.dp),
+                                shape = ButtonShape,
+                                colors = ButtonDefaults.buttonColors(containerColor = Color.White),
+                                border = ButtonDefaults.outlinedButtonBorder
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Text("G", fontWeight = FontWeight.Bold, color = Terracotta, fontSize = 20.sp, modifier = Modifier.padding(end = 8.dp))
+                                    Text("Continuar con Google", color = NavyText, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            Spacer(Modifier.height(8.dp))
+                            TextButton(
+                                onClick = { showGoogleMockDialog = true },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = "¿Probar en local? Simular Google Login",
+                                    color = NavyText,
+                                    fontSize = 13.sp,
+                                    style = androidx.compose.ui.text.TextStyle(
+                                        textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                )
+                            }
+
+                            if (showGoogleMockDialog) {
+                                var googleEmail by remember { mutableStateOf("") }
+                                var googleName by remember { mutableStateOf("") }
+                                var googleError by remember { mutableStateOf<String?>(null) }
+                                
+                                AlertDialog(
+                                    onDismissRequest = { showGoogleMockDialog = false },
+                                    title = { Text("Google Sign-In (OAuth Mock)") },
+                                    text = {
+                                        Column {
+                                            googleError?.let {
+                                                Text(it, color = Color.Red, fontSize = 14.sp)
+                                                Spacer(Modifier.height(8.dp))
+                                            }
+                                            OutlinedTextField(
+                                                value = googleEmail,
+                                                onValueChange = { googleEmail = it },
+                                                label = { Text("Correo de Google") },
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+                                            Spacer(Modifier.height(8.dp))
+                                            OutlinedTextField(
+                                                value = googleName,
+                                                onValueChange = { googleName = it },
+                                                label = { Text("Nombre") },
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+                                        }
+                                    },
+                                    confirmButton = {
+                                        Button(
+                                            onClick = {
+                                                if (!googleEmail.contains("@")) {
+                                                    googleError = "Correo electrónico inválido"
+                                                } else {
+                                                    scope.launch {
+                                                        val mockToken = "mock-token-$googleEmail"
+                                                        val resp = api.loginWithGoogle(mockToken, "ROLE_USER")
+                                                        if (resp != null) {
+                                                            token = resp.token
+                                                            userId = resp.id
+                                                            currentUsername = googleEmail
+                                                            userEmail = googleEmail
+                                                            api.setToken(resp.token)
+                                                            
+                                                            try {
+                                                                val nameToUse = googleName.ifBlank { googleEmail.substringBefore("@") }
+                                                                api.createUserProfile(nameToUse, googleEmail, "999999999")
+                                                            } catch (e: Exception) {}
+                                                            
+                                                            try {
+                                                                val profile = api.getUserProfile(googleEmail)
+                                                                if (profile != null) {
+                                                                    userId = profile.id
+                                                                }
+                                                            } catch(e: Exception) {}
+                                                            
+                                                            showGoogleMockDialog = false
+                                                            navController.navigate("coaches") { popUpTo("login") { inclusive = true } }
+                                                        } else {
+                                                            googleError = "Error al conectar con el backend"
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        ) {
+                                            Text("Ingresar")
+                                        }
+                                    },
+                                    dismissButton = {
+                                        TextButton(onClick = { showGoogleMockDialog = false }) {
+                                            Text("Cancelar")
+                                        }
+                                    }
+                                )
+                            }
                         }
                     }
                     Spacer(Modifier.height(16.dp))

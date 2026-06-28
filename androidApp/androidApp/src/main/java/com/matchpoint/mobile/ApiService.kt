@@ -40,7 +40,7 @@ class ApiService(private val baseUrl: String = "http://10.0.2.2:8080/api/v1") {
         response?.let {
             try {
                 val jsonObject = JSONObject(it)
-                val token = jsonObject.optString("token", null)
+                val token = if (jsonObject.has("token")) jsonObject.getString("token") else null
                 val id = jsonObject.optLong("id", 0L)
                 val user = jsonObject.optString("username", "")
                 
@@ -55,6 +55,32 @@ class ApiService(private val baseUrl: String = "http://10.0.2.2:8080/api/v1") {
                 if (token != null) LoginResponse(id, user, token, roles) else null
             } catch (e: Exception) { 
                 println("Login parse error: $e")
+                null 
+            }
+        }
+    }
+
+    suspend fun loginWithGoogle(idToken: String, role: String = "ROLE_USER"): LoginResponse? = withContext(Dispatchers.IO) {
+        val json = """{"idToken":"$idToken","role":"$role"}"""
+        val response = makeRequest("/authentication/google", "POST", json)
+        response?.let {
+            try {
+                val jsonObject = JSONObject(it)
+                val token = if (jsonObject.has("token")) jsonObject.getString("token") else null
+                val id = jsonObject.optLong("id", 0L)
+                val user = jsonObject.optString("username", "")
+                
+                val roles = mutableListOf<String>()
+                val rolesArray = jsonObject.optJSONArray("roles")
+                if (rolesArray != null) {
+                    for (i in 0 until rolesArray.length()) {
+                        roles.add(rolesArray.getString(i))
+                    }
+                }
+                
+                if (token != null) LoginResponse(id, user, token, roles) else null
+            } catch (e: Exception) { 
+                println("Google Login parse error: $e")
                 null 
             }
         }
