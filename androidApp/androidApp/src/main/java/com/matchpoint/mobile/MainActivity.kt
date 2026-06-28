@@ -5,6 +5,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -31,6 +33,63 @@ val WhiteSurface = Color(0xFFFFFFFF)
 val CardShape = RoundedCornerShape(24.dp)
 val ButtonShape = RoundedCornerShape(100.dp) // Fully rounded
 val InputShape = RoundedCornerShape(16.dp)
+
+fun formatDate(dateStr: String): String {
+    return try {
+        dateStr.replace("T", " ").substring(0, 16)
+    } catch(e: Exception) {
+        dateStr
+    }
+}
+
+fun getDayOfWeekSpanish(dateStr: String): String {
+    return try {
+        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+        val date = sdf.parse(dateStr)
+        val cal = java.util.Calendar.getInstance()
+        if (date != null) cal.time = date
+        when (cal.get(java.util.Calendar.DAY_OF_WEEK)) {
+            java.util.Calendar.MONDAY -> "Lunes"
+            java.util.Calendar.TUESDAY -> "Martes"
+            java.util.Calendar.WEDNESDAY -> "Miercoles"
+            java.util.Calendar.THURSDAY -> "Jueves"
+            java.util.Calendar.FRIDAY -> "Viernes"
+            java.util.Calendar.SATURDAY -> "Sabado"
+            java.util.Calendar.SUNDAY -> "Domingo"
+            else -> "Lunes"
+        }
+    } catch (e: Exception) {
+        "Lunes"
+    }
+}
+
+fun formatFriendlyAvailability(availStr: String?): String {
+    if (availStr == null) return "Sin disponibilidad"
+    val clean = availStr.trim()
+    if (clean.startsWith("{")) {
+        return try {
+            val json = org.json.JSONObject(clean)
+            val daysList = listOf("Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado", "Domingo")
+            val parts = mutableListOf<String>()
+            for (day in daysList) {
+                if (json.has(day)) {
+                    val array = json.getJSONArray(day)
+                    if (array.length() > 0) {
+                        val ranges = mutableListOf<String>()
+                        for (i in 0 until array.length()) {
+                            ranges.add(array.getString(i))
+                        }
+                        parts.add("$day: ${ranges.joinToString(", ")}")
+                    }
+                }
+            }
+            if (parts.isNotEmpty()) parts.joinToString(" | ") else "Sin disponibilidad"
+        } catch (e: Exception) {
+            availStr
+        }
+    }
+    return availStr
+}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -227,111 +286,317 @@ Button(
             
 
             composable("coaches") {
-                var coaches by remember { mutableStateOf<List<Coach>>(emptyList()) }
-                LaunchedEffect(Unit) { coaches = api.getCoaches() }
-
-                Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                    Text("Nuestros Coaches", fontWeight = FontWeight.ExtraBold, fontSize = 28.sp, color = NavyText, modifier = Modifier.padding(bottom = 16.dp))
-                    Spacer(Modifier.height(16.dp))
-                    
-                    coaches.forEach { coach ->
-                        Card(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-                            shape = CardShape,
-                            colors = CardDefaults.cardColors(containerColor = WhiteSurface),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                        ) {
-                            Row(modifier = Modifier.padding(16.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                Column { 
-                                    Text(coach.name, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = NavyText)
-                                    Text(coach.sportType ?: coach.expertise, fontSize = 14.sp, color = Color.Gray) 
-                                    coach.availability?.let { Text("Horario: $it", fontSize = 12.sp, color = Terracotta, modifier = Modifier.padding(top = 4.dp)) } 
-                                }
-                                Column(horizontalAlignment = Alignment.End) {
-                                    coach.pricePerHour?.let { Text("$${it}/hr", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = SoftGreen) }
-                                    coach.rating?.let { Text("⭐ ${String.format("%.1f", it)}", fontSize = 14.sp, color = Terracotta, fontWeight = FontWeight.Medium) }
-                                }
-                            }
-                        }
-                    }
-                    if (coaches.isEmpty()) Text("No hay coaches disponibles", color = Color.Gray, modifier = Modifier.padding(16.dp))
-                }
-            }
-
-            composable("courts") {
-                var coaches by remember { mutableStateOf<List<Coach>>(emptyList()) }
-                var services by remember { mutableStateOf<List<CoachService>>(emptyList()) }
-                var selectedService by remember { mutableStateOf<CoachService?>(null) }
-                var selectedCoach by remember { mutableStateOf<Coach?>(null) }
-                var showBookingDialog by remember { mutableStateOf(false) }
+                var allCoachesList by remember { mutableStateOf<List<Coach>>(emptyList()) }
+                var sportType by remember { mutableStateOf("") }
+                var location by remember { mutableStateOf("") }
+                var maxPrice by remember { mutableStateOf("") }
+                var minRating by remember { mutableStateOf("") }
                 var loading by remember { mutableStateOf(true) }
 
                 LaunchedEffect(Unit) {
-                    coaches = api.getCoaches()
+                    loading = true
+                    allCoachesList = api.getCoaches()
                     loading = false
-                    if (coaches.isNotEmpty()) {
-                        val firstCoach = coaches.first()
-                        selectedCoach = firstCoach
-                        services = api.getCoachServices(firstCoach.id)
+                }
+
+                val filteredCoaches = remember(sportType, location, maxPrice, minRating, allCoachesList) {
+                    allCoachesList.filter { coach ->
+                        val matchSport = sportType.isBlank() || 
+                            (coach.sportType?.contains(sportType, ignoreCase = true) == true) ||
+                            coach.expertise.contains(sportType, ignoreCase = true) ||
+                            coach.name.contains(sportType, ignoreCase = true)
+                        val matchLocation = location.isBlank() || 
+                            (coach.location?.contains(location, ignoreCase = true) == true)
+                        val matchPrice = maxPrice.toDoubleOrNull()?.let {
+                            coach.pricePerHour == null || coach.pricePerHour <= it
+                        } ?: true
+                        val matchRating = minRating.toDoubleOrNull()?.let {
+                            coach.rating == null || coach.rating >= it
+                        } ?: true
+                        matchSport && matchLocation && matchPrice && matchRating
                     }
                 }
 
-                Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                    Text("Servicios", fontWeight = FontWeight.ExtraBold, fontSize = 28.sp, color = NavyText, modifier = Modifier.padding(bottom = 16.dp))
-
-                    if (coaches.isNotEmpty()) {
-                        var selectedCoachIndex by remember { mutableStateOf(0) }
-                        var expanded by remember { mutableStateOf(false) }
-
-                        ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
-                            OutlinedTextField(
-                                value = coaches.getOrNull(selectedCoachIndex)?.name ?: "Seleccionar Coach",
-                                onValueChange = {},
-                                readOnly = true,
-                                label = { Text("Coach") },
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                                modifier = Modifier.fillMaxWidth().menuAnchor()
-                            )
-                            ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                                coaches.forEachIndexed { index, coach ->
-                                    DropdownMenuItem(text = { Text(coach.name) }, onClick = {
-                                        selectedCoachIndex = index
-                                        selectedCoach = coach
-                                        expanded = false
-                                        scope.launch { services = api.getCoachServices(coach.id) }
-                                    })
-                                }
+                Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
+                    Text("Nuestros Coaches", fontWeight = FontWeight.ExtraBold, fontSize = 28.sp, color = NavyText, modifier = Modifier.padding(bottom = 8.dp))
+                    
+                    // Filter Panel
+                    Card(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                        shape = CardShape,
+                        colors = CardDefaults.cardColors(containerColor = WhiteSurface),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text("Filtros de búsqueda", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = NavyText, modifier = Modifier.padding(bottom = 8.dp))
+                            
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedTextField(
+                                    value = sportType,
+                                    onValueChange = { sportType = it },
+                                    label = { Text("Deporte / Nombre", fontSize = 12.sp) },
+                                    shape = InputShape,
+                                    modifier = Modifier.weight(1f),
+                                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Terracotta)
+                                )
+                                OutlinedTextField(
+                                    value = location,
+                                    onValueChange = { location = it },
+                                    label = { Text("Ubicación", fontSize = 12.sp) },
+                                    shape = InputShape,
+                                    modifier = Modifier.weight(1f),
+                                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Terracotta)
+                                )
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedTextField(
+                                    value = maxPrice,
+                                    onValueChange = { maxPrice = it },
+                                    label = { Text("Precio Max", fontSize = 12.sp) },
+                                    shape = InputShape,
+                                    modifier = Modifier.weight(1f),
+                                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Terracotta)
+                                )
+                                OutlinedTextField(
+                                    value = minRating,
+                                    onValueChange = { minRating = it },
+                                    label = { Text("Rating Min", fontSize = 12.sp) },
+                                    shape = InputShape,
+                                    modifier = Modifier.weight(1f),
+                                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Terracotta)
+                                )
                             }
                         }
                     }
-
-                    Spacer(Modifier.height(16.dp))
-
+                    
                     if (loading) {
-                        Text("Cargando...", color = Color.Gray)
-                    } else if (services.isEmpty()) {
-                        Text("Este coach no tiene servicios disponibles. Crea servicios desde la web.", color = Color.Gray, modifier = Modifier.padding(vertical = 16.dp))
+                        Text("Cargando coaches...", color = Color.Gray, modifier = Modifier.padding(16.dp))
+                    } else if (filteredCoaches.isEmpty()) {
+                        Text("No se encontraron coaches.", color = Color.Gray, modifier = Modifier.padding(16.dp))
                     } else {
-                        services.forEach { service ->
+                        filteredCoaches.forEach { coach ->
                             Card(
                                 modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
                                 shape = CardShape,
                                 colors = CardDefaults.cardColors(containerColor = WhiteSurface),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                                onClick = {
-                                    selectedService = service
-                                    showBookingDialog = true
-                                }
+                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                             ) {
                                 Row(modifier = Modifier.padding(16.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                    Column {
-                                        Text(service.name, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = NavyText)
-                                        Text(selectedCoach?.name ?: "", fontSize = 14.sp, color = Color.Gray)
-                                        service.description?.let { Text(it, fontSize = 12.sp, color = Color.Gray) }
+                                    Column { 
+                                        Text(coach.name, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = NavyText)
+                                        Text(coach.sportType ?: coach.expertise, fontSize = 14.sp, color = Color.Gray) 
+                                        coach.availability?.let { Text("Horario: ${formatFriendlyAvailability(it)}", fontSize = 12.sp, color = Terracotta, modifier = Modifier.padding(top = 4.dp)) } 
                                     }
                                     Column(horizontalAlignment = Alignment.End) {
-                                        service.price?.let { Text("$${it}", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = SoftGreen) }
-                                        Text("📅 Reservar", fontSize = 14.sp, color = Terracotta, fontWeight = FontWeight.Medium)
+                                        coach.pricePerHour?.let { Text("$${it}/hr", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = SoftGreen) }
+                                        coach.rating?.let { Text("⭐ ${String.format("%.1f", it)}", fontSize = 14.sp, color = Terracotta, fontWeight = FontWeight.Medium) }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            composable("courts") {
+                var activeTab by remember { mutableStateOf("services") } // "services" or "courts"
+                
+                // Coach Services Tab State
+                var coaches by remember { mutableStateOf<List<Coach>>(emptyList()) }
+                var services by remember { mutableStateOf<List<CoachService>>(emptyList()) }
+                var selectedService by remember { mutableStateOf<CoachService?>(null) }
+                var selectedCoach by remember { mutableStateOf<Coach?>(null) }
+                var loadingServices by remember { mutableStateOf(true) }
+
+                // Courts Tab State
+                var allCourtsList by remember { mutableStateOf<List<Court>>(emptyList()) }
+                var courtSportType by remember { mutableStateOf("") }
+                var courtLocation by remember { mutableStateOf("") }
+                var selectedCourt by remember { mutableStateOf<Court?>(null) }
+                var loadingCourts by remember { mutableStateOf(true) }
+
+                var showBookingDialog by remember { mutableStateOf(false) }
+
+                val filteredCourts = remember(courtSportType, courtLocation, allCourtsList) {
+                    allCourtsList.filter { court ->
+                        val matchSport = courtSportType.isBlank() || 
+                            (court.sportType?.contains(courtSportType, ignoreCase = true) == true) ||
+                            court.name.contains(courtSportType, ignoreCase = true)
+                        val matchLocation = courtLocation.isBlank() || 
+                            court.location.contains(courtLocation, ignoreCase = true)
+                        matchSport && matchLocation
+                    }
+                }
+
+                LaunchedEffect(activeTab) {
+                    if (activeTab == "services") {
+                        coaches = api.getCoaches()
+                        loadingServices = false
+                        if (coaches.isNotEmpty()) {
+                            val firstCoach = coaches.first()
+                            selectedCoach = firstCoach
+                            services = api.getCoachServices(firstCoach.id)
+                        }
+                    } else {
+                        loadingCourts = true
+                        allCourtsList = api.getCourts()
+                        loadingCourts = false
+                    }
+                }
+
+                Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                    // Top tab switcher
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { activeTab = "services" },
+                            modifier = Modifier.weight(1f),
+                            shape = ButtonShape,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (activeTab == "services") Terracotta else Color.LightGray
+                            )
+                        ) {
+                            Text("Servicios de Coach", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
+                        Button(
+                            onClick = { activeTab = "courts" },
+                            modifier = Modifier.weight(1f),
+                            shape = ButtonShape,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (activeTab == "courts") Terracotta else Color.LightGray
+                            )
+                        ) {
+                            Text("Alquiler Canchas", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
+                    }
+
+                    if (activeTab == "services") {
+                        Text("Contratar Entrenador", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp, color = NavyText, modifier = Modifier.padding(bottom = 12.dp))
+                        
+                        if (coaches.isNotEmpty()) {
+                            var selectedCoachIndex by remember { mutableStateOf(0) }
+                            var expanded by remember { mutableStateOf(false) }
+
+                            ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
+                                OutlinedTextField(
+                                    value = coaches.getOrNull(selectedCoachIndex)?.name ?: "Seleccionar Coach",
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    label = { Text("Coach") },
+                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                                    modifier = Modifier.fillMaxWidth().menuAnchor()
+                                )
+                                ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                                    coaches.forEachIndexed { index, coach ->
+                                        DropdownMenuItem(text = { Text(coach.name) }, onClick = {
+                                            selectedCoachIndex = index
+                                            selectedCoach = coach
+                                            expanded = false
+                                            scope.launch { services = api.getCoachServices(coach.id) }
+                                        })
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(Modifier.height(16.dp))
+
+                        if (loadingServices) {
+                            Text("Cargando...", color = Color.Gray)
+                        } else if (services.isEmpty()) {
+                            Text("Este coach no tiene servicios disponibles.", color = Color.Gray, modifier = Modifier.padding(vertical = 16.dp))
+                        } else {
+                            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                                services.forEach { service ->
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                                        shape = CardShape,
+                                        colors = CardDefaults.cardColors(containerColor = WhiteSurface),
+                                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                                        onClick = {
+                                            selectedService = service
+                                            selectedCourt = null
+                                            showBookingDialog = true
+                                        }
+                                    ) {
+                                        Row(modifier = Modifier.padding(16.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(service.name, fontWeight = FontWeight.Bold, fontSize = 17.sp, color = NavyText)
+                                                Text(selectedCoach?.name ?: "", fontSize = 13.sp, color = Color.Gray)
+                                                service.description?.let { Text(it, fontSize = 12.sp, color = Color.Gray) }
+                                            }
+                                            Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(start = 8.dp)) {
+                                                service.price?.let { Text("$${it}", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = SoftGreen) }
+                                                Text("📅 Reservar", fontSize = 12.sp, color = Terracotta, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // Courts Search and List Tab
+                        Text("Alquilar Canchas", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp, color = NavyText, modifier = Modifier.padding(bottom = 12.dp))
+                        
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                            shape = CardShape,
+                            colors = CardDefaults.cardColors(containerColor = WhiteSurface),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedTextField(
+                                        value = courtSportType,
+                                        onValueChange = { courtSportType = it },
+                                        label = { Text("Deporte / Nombre", fontSize = 11.sp) },
+                                        shape = InputShape,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    OutlinedTextField(
+                                        value = courtLocation,
+                                        onValueChange = { courtLocation = it },
+                                        label = { Text("Ubicación", fontSize = 11.sp) },
+                                        shape = InputShape,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+                        }
+
+                        if (loadingCourts) {
+                            Text("Cargando...", color = Color.Gray)
+                        } else if (filteredCourts.isEmpty()) {
+                            Text("No se encontraron canchas.", color = Color.Gray, modifier = Modifier.padding(vertical = 16.dp))
+                        } else {
+                            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                                filteredCourts.forEach { court ->
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                                        shape = CardShape,
+                                        colors = CardDefaults.cardColors(containerColor = WhiteSurface),
+                                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                                        onClick = {
+                                            selectedCourt = court
+                                            selectedService = null
+                                            showBookingDialog = true
+                                        }
+                                    ) {
+                                        Row(modifier = Modifier.padding(16.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(court.name, fontWeight = FontWeight.Bold, fontSize = 17.sp, color = NavyText)
+                                                Text("${court.location} • ${court.type}", fontSize = 13.sp, color = Color.Gray)
+                                                court.sportType?.let { Text("Deporte: $it", fontSize = 12.sp, color = Color.Gray) }
+                                                court.openingHours?.let { Text("Horario: $it", fontSize = 12.sp, color = Terracotta) }
+                                            }
+                                            Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(start = 8.dp)) {
+                                                court.pricePerHour?.let { Text("$${it}/hr", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = SoftGreen) }
+                                                Text("📅 Alquilar", fontSize = 12.sp, color = Terracotta, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -339,7 +604,7 @@ Button(
                     }
                 }
 
-                if (showBookingDialog && selectedService != null) {
+                if (showBookingDialog && (selectedService != null || selectedCourt != null)) {
                     val next7Days = remember { 
                         val cal = java.util.Calendar.getInstance()
                         val fmt = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
@@ -350,15 +615,73 @@ Button(
                     }
                     var selectedDate by remember { mutableStateOf(next7Days.first()) }
                     var selectedTime by remember { mutableStateOf("10:00") }
+                    val nameToDisplay = selectedService?.name ?: selectedCourt!!.name
+                    val priceToDisplay = selectedService?.price ?: selectedCourt!!.pricePerHour ?: 40.0
+                    val availabilityToDisplay = selectedCoach?.availability ?: selectedCourt?.openingHours ?: "08:00-22:00"
+                    val times = remember(availabilityToDisplay, selectedDate) {
+                        val defaultTimes = listOf("08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00")
+                        val cleanAvail = availabilityToDisplay.trim()
+                        if (cleanAvail.startsWith("{")) {
+                            try {
+                                val dayName = getDayOfWeekSpanish(selectedDate)
+                                val json = org.json.JSONObject(cleanAvail)
+                                if (json.has(dayName)) {
+                                    val array = json.getJSONArray(dayName)
+                                    val slots = mutableListOf<String>()
+                                    for (i in 0 until array.length()) {
+                                        val range = array.getString(i)
+                                        if (range.contains("-")) {
+                                            val parts = range.split("-")
+                                            val startHour = parts.getOrNull(0)?.split(":")?.getOrNull(0)?.trim()?.toIntOrNull()
+                                            val endHour = parts.getOrNull(1)?.split(":")?.getOrNull(0)?.trim()?.toIntOrNull()
+                                            if (startHour != null && endHour != null && startHour < endHour) {
+                                                for (h in startHour until endHour) {
+                                                    slots.add("%02d:00".format(h))
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if (slots.isNotEmpty()) slots.sorted() else emptyList<String>()
+                                } else {
+                                    emptyList<String>()
+                                }
+                            } catch (e: Exception) {
+                                defaultTimes
+                            }
+                        } else {
+                            if (availabilityToDisplay.contains("-")) {
+                                val parts = availabilityToDisplay.split("-")
+                                val startHour = parts.getOrNull(0)?.split(":")?.getOrNull(0)?.trim()?.toIntOrNull()
+                                val endHour = parts.getOrNull(1)?.split(":")?.getOrNull(0)?.trim()?.toIntOrNull()
+                                if (startHour != null && endHour != null && startHour < endHour) {
+                                    (startHour..endHour).map { "%02d:00".format(it) }
+                                } else defaultTimes
+                            } else defaultTimes
+                        }
+                    }
+                    LaunchedEffect(times) {
+                        if (times.isNotEmpty()) {
+                            if (!times.contains(selectedTime)) {
+                                selectedTime = times.first()
+                            }
+                        } else {
+                            selectedTime = "No disponible"
+                        }
+                    }
+
                     AlertDialog(
                         onDismissRequest = { showBookingDialog = false },
-                        title = { Text("Reservar ${selectedService!!.name}") },
+                        title = { Text("Reservar $nameToDisplay") },
                         text = {
                             Column {
-                                Text("Coach: ${selectedCoach?.name ?: ""}")
-                                selectedCoach?.availability?.let { Text("Disponibilidad: $it", fontSize = 14.sp, color = Terracotta) }
+                                if (selectedService != null) {
+                                    Text("Coach: ${selectedCoach?.name ?: ""}")
+                                } else {
+                                    Text("Tipo: Alquiler de Cancha")
+                                }
+                                Text("Horarios: ${formatFriendlyAvailability(availabilityToDisplay)}", fontSize = 13.sp, color = Terracotta)
                                 Spacer(Modifier.height(4.dp))
-                                Text("Precio: $${selectedService!!.price ?: 0}")
+                                Text("Precio: $${priceToDisplay}")
                                 Spacer(Modifier.height(8.dp))
                                 
                                 Text("Selecciona día:")
@@ -372,7 +695,6 @@ Button(
                                         trailingIcon = { IconButton(onClick = { expandedDate = true }) { Icon(Icons.Default.ArrowDropDown, "Select date") } },
                                         modifier = Modifier.fillMaxWidth()
                                     )
-                                    // Overlay click to open dropdown
                                     Spacer(modifier = Modifier.matchParentSize().background(Color.Transparent).clickable { expandedDate = true })
                                     DropdownMenu(expanded = expandedDate, onDismissRequest = { expandedDate = false }) {
                                         next7Days.forEach { d ->
@@ -387,18 +709,6 @@ Button(
                                 Spacer(Modifier.height(8.dp))
                                 Text("Selecciona hora:")
                                 var expandedTime by remember { mutableStateOf(false) }
-                                val times = remember(selectedCoach?.availability) {
-                                    val avail = selectedCoach?.availability ?: ""
-                                    val defaultTimes = listOf("08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00")
-                                    if (avail.contains("-")) {
-                                        val parts = avail.split("-")
-                                        val startHour = parts.getOrNull(0)?.split(":")?.getOrNull(0)?.trim()?.toIntOrNull()
-                                        val endHour = parts.getOrNull(1)?.split(":")?.getOrNull(0)?.trim()?.toIntOrNull()
-                                        if (startHour != null && endHour != null && startHour < endHour) {
-                                            (startHour..endHour).map { "%02d:00".format(it) }
-                                        } else defaultTimes
-                                    } else defaultTimes
-                                }
                                 Box(modifier = Modifier.fillMaxWidth()) {
                                     OutlinedTextField(
                                         value = selectedTime,
@@ -423,20 +733,24 @@ Button(
                             }
                         },
                         confirmButton = {
-                            Button(onClick = {
-                                scope.launch {
-                                    val userIdVal = userId ?: 1L
-                                    api.createBooking(
-                                        null,
-                                        userIdVal,
-                                        "${selectedDate}T${selectedTime}:00",
-                                        "Service: ${selectedService!!.name}",
-                                        selectedService!!.price ?: 50.0,
-                                        selectedService!!.id
-                                    )
-                                    showBookingDialog = false
-                                }
-                            }, colors = ButtonDefaults.buttonColors(containerColor = SoftGreen)) { Text("CONFIRMAR") }
+                            Button(
+                                enabled = times.isNotEmpty() && selectedTime != "No disponible",
+                                onClick = {
+                                    scope.launch {
+                                        val userIdVal = userId ?: 1L
+                                        api.createBooking(
+                                            selectedCourt?.id,
+                                            userIdVal,
+                                            "${selectedDate}T${selectedTime}:00",
+                                            if (selectedService != null) "Service: ${selectedService!!.name}" else "Court Rental",
+                                            priceToDisplay,
+                                            selectedService?.id
+                                        )
+                                        showBookingDialog = false
+                                    }
+                                }, 
+                                colors = ButtonDefaults.buttonColors(containerColor = SoftGreen)
+                            ) { Text("CONFIRMAR") }
                         },
                         dismissButton = {
                             TextButton(onClick = { showBookingDialog = false }) { Text("CANCELAR") }
@@ -447,9 +761,24 @@ Button(
 
             composable("bookings") {
                 var bookings by remember { mutableStateOf<List<Booking>>(emptyList()) }
-                LaunchedEffect(Unit) { bookings = api.getBookings() }
+                var showReviewDialog by remember { mutableStateOf(false) }
+                var reviewingCoachId by remember { mutableStateOf<Long?>(null) }
+                var reviewingCoachName by remember { mutableStateOf("") }
+                var reviewRating by remember { mutableStateOf(5) }
+                var reviewComment by remember { mutableStateOf("") }
 
-                Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                val loadUserBookings = {
+                    scope.launch {
+                        val userIdVal = userId ?: 1L
+                        bookings = api.getBookingsByUser(userIdVal)
+                    }
+                }
+
+                LaunchedEffect(Unit) {
+                    loadUserBookings()
+                }
+
+                Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
                     Text("Mis Reservas", fontWeight = FontWeight.ExtraBold, fontSize = 28.sp, color = NavyText, modifier = Modifier.padding(bottom = 16.dp))
                     
                     bookings.forEach { b ->
@@ -459,28 +788,93 @@ Button(
                             colors = CardDefaults.cardColors(containerColor = WhiteSurface),
                             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                         ) {
-                            Row(modifier = Modifier.padding(16.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                Column {
-                                    Text(b.serviceName ?: "Cancha Reservada", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = NavyText)
-                                    Text("Reserva #${b.id}", fontSize = 12.sp, color = Color.Gray)
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(b.serviceName ?: "Cancha Reservada", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = NavyText)
+                                        Text("Reserva #${b.id} • ${formatDate(b.startTime)}", fontSize = 12.sp, color = Color.Gray)
+                                    }
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = when (b.status.uppercase()) { "CONFIRMED", "COMPLETED" -> SoftGreen.copy(alpha=0.2f); "PENDING" -> Color(0xFFFFF3E0); else -> Color(0xFFF5F5F5) },
+                                        modifier = Modifier.padding(start = 8.dp)
+                                    ) {
+                                        Text(
+                                            when (b.status.uppercase()) { "PENDING" -> "PENDIENTE"; "CONFIRMED" -> "CONFIRMADA"; "COMPLETED" -> "COMPLETADA"; else -> b.status }, 
+                                            color = when (b.status.uppercase()) { "CONFIRMED", "COMPLETED" -> SoftGreen; "PENDING" -> Color(0xFFFF9800); else -> Color.Gray },
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 10.sp,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
                                 }
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = when (b.status.uppercase()) { "CONFIRMED", "COMPLETED" -> SoftGreen.copy(alpha=0.2f); "PENDING" -> Color(0xFFFFF3E0); else -> Color(0xFFF5F5F5) },
-                                    modifier = Modifier.padding(start = 8.dp)
-                                ) {
-                                    Text(
-                                        when (b.status.uppercase()) { "PENDING" -> "RESERVA PENDIENTE DE APROBACIÓN"; "CONFIRMED" -> "CONFIRMADA"; "COMPLETED" -> "COMPLETADA"; else -> b.status }, 
-                                        color = when (b.status.uppercase()) { "CONFIRMED", "COMPLETED" -> SoftGreen; "PENDING" -> Color(0xFFFF9800); else -> Color.Gray },
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 10.sp, // Made slightly smaller to fit the long text
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                    )
+                                
+                                if (b.status.uppercase() == "COMPLETED" && b.coach != null) {
+                                    Button(
+                                        onClick = {
+                                            reviewingCoachId = b.coach.id
+                                            reviewingCoachName = b.coach.name ?: "Coach"
+                                            reviewRating = 5
+                                            reviewComment = ""
+                                            showReviewDialog = true
+                                        },
+                                        shape = RoundedCornerShape(8.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Terracotta),
+                                        modifier = Modifier.padding(top = 8.dp).align(Alignment.End)
+                                    ) {
+                                        Text("Valorar Coach", fontSize = 11.sp, color = Color.White)
+                                    }
                                 }
                             }
                         }
                     }
                     if (bookings.isEmpty()) Text("Aún no tienes reservas", color = Color.Gray, modifier = Modifier.padding(16.dp))
+                }
+
+                if (showReviewDialog && reviewingCoachId != null) {
+                    AlertDialog(
+                        onDismissRequest = { showReviewDialog = false },
+                        title = { Text("Valorar a $reviewingCoachName") },
+                        text = {
+                            Column {
+                                Text("Selecciona puntuación:")
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.padding(vertical = 8.dp)
+                                ) {
+                                    (1..5).forEach { stars ->
+                                        IconButton(onClick = { reviewRating = stars }) {
+                                            Text(
+                                                if (stars <= reviewRating) "★" else "☆",
+                                                color = Terracotta,
+                                                fontSize = 28.sp
+                                            )
+                                        }
+                                    }
+                                }
+                                OutlinedTextField(
+                                    value = reviewComment,
+                                    onValueChange = { reviewComment = it },
+                                    label = { Text("Comentario (opcional)") },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        },
+                        confirmButton = {
+                            Button(onClick = {
+                                scope.launch {
+                                    val userIdVal = userId ?: 1L
+                                    api.createReview(reviewingCoachId!!, userIdVal, reviewRating, reviewComment)
+                                    showReviewDialog = false
+                                }
+                            }, colors = ButtonDefaults.buttonColors(containerColor = SoftGreen)) {
+                                Text("ENVIAR")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showReviewDialog = false }) { Text("CANCELAR") }
+                        }
+                    )
                 }
             }
 

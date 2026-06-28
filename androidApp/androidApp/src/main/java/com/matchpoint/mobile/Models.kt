@@ -71,3 +71,12 @@ data class CoachService(
     val price: Double?,
     val coachId: Long?
 )
+
+data class Review(
+    val id: Long,
+    val coachId: Long,
+    val userProfileId: Long,
+    val rating: Int,
+    val comment: String?,
+    val createdAt: String?
+)

@@ -11,7 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.IOException
 
-class ApiService(private val baseUrl: String = "https://matchpoint-api-production-9e17.up.railway.app/api/v1") {
+class ApiService(private val baseUrl: String = "http://10.0.2.2:8080/api/v1") {
     private val client = OkHttpClient()
     private var token: String? = null
 
@@ -110,6 +110,22 @@ class ApiService(private val baseUrl: String = "https://matchpoint-api-productio
     suspend fun getBookings(): List<Booking> = withContext(Dispatchers.IO) {
         val response = makeRequest("/bookings")
         parseBookings(response ?: "[]")
+    }
+
+    suspend fun getBookingsByUser(userId: Long): List<Booking> = withContext(Dispatchers.IO) {
+        val response = makeRequest("/bookings/user/$userId")
+        parseBookings(response ?: "[]")
+    }
+
+    suspend fun createReview(coachId: Long, userProfileId: Long, rating: Int, comment: String): Boolean = withContext(Dispatchers.IO) {
+        val json = JSONObject().apply {
+            put("coachId", coachId)
+            put("userProfileId", userProfileId)
+            put("rating", rating)
+            put("comment", comment)
+        }.toString()
+        val response = makeRequest("/reviews", "POST", json)
+        response != null && response.contains("id")
     }
 
     suspend fun getUserProfile(email: String): UserProfile? = withContext(Dispatchers.IO) {
@@ -250,6 +266,13 @@ class ApiService(private val baseUrl: String = "https://matchpoint-api-productio
                 val court = if (courtObj != null) Booking.CourtSummary(courtObj.optLong("id"), courtObj.optString("name"), null, null) else null
                 
                 val coachServiceObj = obj.optJSONObject("coachService")
+                val coachObj = coachServiceObj?.optJSONObject("coach")
+                val coach = if (coachObj != null) Booking.CoachSummary(
+                    id = coachObj.optLong("id"),
+                    name = coachObj.optString("name"),
+                    sportType = null
+                ) else null
+
                 val serviceName = coachServiceObj?.optString("name")
                 val price = obj.optDouble("amount", 0.0)
                 
@@ -259,7 +282,7 @@ class ApiService(private val baseUrl: String = "https://matchpoint-api-productio
                     endTime = obj.optString("endTime"),
                     user = user,
                     court = court,
-                    coach = null,
+                    coach = coach,
                     status = obj.optString("status", "PENDING"),
                     totalPrice = if (price > 0) price else null,
                     serviceName = serviceName,
