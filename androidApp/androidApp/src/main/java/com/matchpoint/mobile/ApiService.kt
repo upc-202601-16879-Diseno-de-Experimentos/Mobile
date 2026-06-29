@@ -289,7 +289,12 @@ class ApiService(private val baseUrl: String = "http://10.0.2.2:8080/api/v1") {
                 val user = if (userObj != null) Booking.UserSummary(userObj.optLong("id"), userObj.optString("name"), null, null) else null
                 
                 val courtObj = obj.optJSONObject("court")
-                val court = if (courtObj != null) Booking.CourtSummary(courtObj.optLong("id"), courtObj.optString("name"), null, null) else null
+                val court = if (courtObj != null) Booking.CourtSummary(
+                    courtObj.optLong("id"),
+                    courtObj.optString("name").ifBlank { null },
+                    courtObj.optString("location").ifBlank { null },
+                    courtObj.optString("sportType").ifBlank { null }
+                ) else null
                 
                 val coachServiceObj = obj.optJSONObject("coachService")
                 val coachObj = coachServiceObj?.optJSONObject("coach")
