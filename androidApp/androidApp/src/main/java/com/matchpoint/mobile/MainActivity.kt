@@ -1025,7 +1025,24 @@ fun MatchPointApp() {
                             Column(modifier = Modifier.padding(16.dp)) {
                                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(b.serviceName ?: "Cancha Reservada", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = NavyText)
+                                        val title = if (b.court != null) {
+                                            b.court.name ?: "Cancha Reservada"
+                                        } else {
+                                            b.serviceName ?: "Servicio Reservado"
+                                        }
+                                        Text(title, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = NavyText)
+                                        
+                                        if (b.court != null) {
+                                            b.court.location?.let {
+                                                Text("📍 $it", fontSize = 13.sp, color = Color.Gray, modifier = Modifier.padding(top = 2.dp))
+                                            }
+                                        } else if (b.coach != null) {
+                                            b.coach.name?.let {
+                                                Text("👤 Entrenador: $it", fontSize = 13.sp, color = Color.Gray, modifier = Modifier.padding(top = 2.dp))
+                                            }
+                                        }
+                                        
+                                        Spacer(modifier = Modifier.height(4.dp))
                                         Text("Reserva #${b.id} • ${formatDate(b.startTime)}", fontSize = 12.sp, color = Color.Gray)
                                     }
                                     Surface(

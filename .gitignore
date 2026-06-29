@@ -5,6 +5,7 @@ androidApp/build/
 androidApp/gradle/
 
 # IDE
+temp_auto_push.bat
 androidApp/.idea/
 .idea/
 
@@ -12,4 +13,5 @@ androidApp/.idea/
 *.apk
 
 # OS
-.DS_Store
+.DS_Store.gitignore
+branch_structure.json
