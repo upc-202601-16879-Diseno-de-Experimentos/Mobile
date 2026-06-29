@@ -566,13 +566,29 @@ Button(
                                 colors = CardDefaults.cardColors(containerColor = WhiteSurface),
                                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                             ) {
-                                Row(modifier = Modifier.padding(16.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                    Column { 
+                                Row(
+                                    modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) { 
                                         Text(coach.name, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = NavyText)
                                         Text(coach.sportType ?: coach.expertise, fontSize = 14.sp, color = Color.Gray) 
-                                        coach.availability?.let { Text("Horario: ${formatFriendlyAvailability(it)}", fontSize = 12.sp, color = Terracotta, modifier = Modifier.padding(top = 4.dp)) } 
+                                        coach.availability?.let { 
+                                            Text(
+                                                text = "Horario: ${formatFriendlyAvailability(it)}",
+                                                fontSize = 12.sp,
+                                                color = Terracotta,
+                                                maxLines = 1,
+                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                                modifier = Modifier.padding(top = 4.dp)
+                                            )
+                                        } 
                                     }
-                                    Column(horizontalAlignment = Alignment.End) {
+                                    Column(
+                                        horizontalAlignment = Alignment.End,
+                                        modifier = Modifier.wrapContentWidth()
+                                    ) {
                                         coach.pricePerHour?.let { Text("$${it}/hr", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = SoftGreen) }
                                         coach.rating?.let { Text("⭐ ${String.format("%.1f", it)}", fontSize = 14.sp, color = Terracotta, fontWeight = FontWeight.Medium) }
                                     }
