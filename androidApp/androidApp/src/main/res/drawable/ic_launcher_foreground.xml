@@ -3,10 +3,6 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Fondo de la marca con color WarmBackground -->
-    <path
-        android:fillColor="#FFF9F5"
-        android:pathData="M0,0h108v108H0z"/>
     <!-- Pelota de tenis en color Terracotta -->
     <path
         android:fillColor="#E07A5F"

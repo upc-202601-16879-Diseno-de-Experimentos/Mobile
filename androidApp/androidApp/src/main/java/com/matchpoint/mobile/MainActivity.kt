@@ -29,6 +29,10 @@ import androidx.compose.ui.platform.LocalContext
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 
 // Design System Tokens (Cálido y Acogedor)
 val WarmBackground = Color(0xFFFFF9F5)
@@ -149,6 +153,8 @@ fun MatchPointApp() {
                 var username by remember { mutableStateOf("") }
                 var password by remember { mutableStateOf("") }
                 var error by remember { mutableStateOf<String?>(null) }
+                var passwordVisible by remember { mutableStateOf(false) }
+
 
                 val context = LocalContext.current
                 val gso = remember {
@@ -219,10 +225,24 @@ fun MatchPointApp() {
                             
                             OutlinedTextField(value = username, onValueChange = { username = it }, label = { Text("Usuario") }, shape = InputShape, modifier = Modifier.fillMaxWidth(), colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = Color.LightGray, focusedBorderColor = Terracotta))
                             Spacer(Modifier.height(12.dp))
-                            OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text("Password") }, shape = InputShape, modifier = Modifier.fillMaxWidth(), colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = Color.LightGray, focusedBorderColor = Terracotta))
+                            OutlinedTextField(
+                                value = password,
+                                onValueChange = { password = it },
+                                label = { Text("Password") },
+                                shape = InputShape,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = Color.LightGray, focusedBorderColor = Terracotta),
+                                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                                trailingIcon = {
+                                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                        Text(if (passwordVisible) "👁️" else "🔒", fontSize = 20.sp)
+                                    }
+                                }
+                            )
                             Spacer(Modifier.height(24.dp))
                             
-Button(
+                            Button(
                                 onClick = {
                                     if (username.isBlank() || password.isBlank()) {
                                         error = "Ingresa usuario y password"
@@ -399,6 +419,7 @@ Button(
                  var phone by remember { mutableStateOf("") }
                  var username by remember { mutableStateOf("") }
                  var password by remember { mutableStateOf("") }
+                 var passwordVisible by remember { mutableStateOf(false) }
                  var error by remember { mutableStateOf<String?>(null) }
 
                  Column(modifier = Modifier.fillMaxSize().padding(32.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
@@ -421,8 +442,21 @@ Button(
                             Spacer(Modifier.height(8.dp))
                             OutlinedTextField(value = username, onValueChange = { username = it }, label = { Text("Usuario") }, shape = InputShape, modifier = Modifier.fillMaxWidth())
                             Spacer(Modifier.height(8.dp))
-                            OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text("Password") }, shape = InputShape, modifier = Modifier.fillMaxWidth())
-                            Spacer(Modifier.height(24.dp))
+                             OutlinedTextField(
+                                 value = password,
+                                 onValueChange = { password = it },
+                                 label = { Text("Password") },
+                                 shape = InputShape,
+                                 modifier = Modifier.fillMaxWidth(),
+                                 visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                                 trailingIcon = {
+                                     IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                         Text(if (passwordVisible) "👁️" else "🔒", fontSize = 20.sp)
+                                     }
+                                 }
+                             )
+                             Spacer(Modifier.height(24.dp))
                             
                             Button(onClick = {
                                 if (name.isBlank() || username.isBlank() || password.isBlank()) { error = "Llena todos los campos" }
