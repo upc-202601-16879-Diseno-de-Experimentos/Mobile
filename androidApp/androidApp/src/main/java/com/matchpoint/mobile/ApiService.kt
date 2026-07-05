@@ -11,7 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.IOException
 
-class ApiService(private val baseUrl: String = "http://10.0.2.2:8080/api/v1") {
+class ApiService(private val baseUrl: String = "https://matchpoint-api-production-9e17.up.railway.app/api/v1") {
     private val client = OkHttpClient()
     private var token: String? = null
 
@@ -104,11 +104,13 @@ class ApiService(private val baseUrl: String = "http://10.0.2.2:8080/api/v1") {
         parseCourts(response ?: "[]")
     }
 
-    suspend fun searchCourts(sportType: String?, location: String?, maxPrice: Double?): List<Court> = withContext(Dispatchers.IO) {
+    suspend fun searchCourts(sportType: String?, location: String?, maxPrice: Double?, userLat: Double? = null, userLon: Double? = null): List<Court> = withContext(Dispatchers.IO) {
         var endpoint = "/courts/search?"
         sportType?.let { endpoint += "sportType=$it&" }
         location?.let { endpoint += "location=$it&" }
-        maxPrice?.let { endpoint += "maxPrice=$it" }
+        maxPrice?.let { endpoint += "maxPrice=$it&" }
+        userLat?.let { endpoint += "userLat=$it&" }
+        userLon?.let { endpoint += "userLon=$it" }
         val response = makeRequest(endpoint)
         parseCourts(response ?: "[]")
     }
@@ -223,7 +225,9 @@ class ApiService(private val baseUrl: String = "http://10.0.2.2:8080/api/v1") {
                 val hours = item.split("\"openingHours\":\"").getOrNull(1)?.split("\"")?.getOrNull(0)
                 val phone = item.split("\"phone\":\"").getOrNull(1)?.split("\"")?.getOrNull(0)
                 val address = item.split("\"address\":\"").getOrNull(1)?.split("\"")?.getOrNull(0)
-                courts.add(Court(id, name, location, type, sportType, price, desc, img, avail, hours, phone, address))
+                val lat = item.split("\"latitude\":").getOrNull(1)?.split(",")?.getOrNull(0)?.replace("}", "")?.replace("]", "")?.toDoubleOrNull()
+                val lon = item.split("\"longitude\":").getOrNull(1)?.split(",")?.getOrNull(0)?.replace("}", "")?.replace("]", "")?.toDoubleOrNull()
+                courts.add(Court(id, name, location, type, sportType, price, desc, img, avail, hours, phone, address, lat, lon))
             } catch (e: Exception) { }
         }
         return courts

@@ -68,6 +68,12 @@ dependencies {
 
     // Google Auth SDK
     implementation("com.google.android.gms:play-services-auth:21.2.0")
+    
+    // Location SDK
+    implementation("com.google.android.gms:play-services-location:21.2.0")
+
+    // OpenStreetMap
+    implementation("org.osmdroid:osmdroid-android:6.1.18")
 
     // HTTP Client
     implementation("com.squareup.okhttp3:okhttp:4.12.0")

@@ -12,7 +12,9 @@ data class Court(
     val isAvailable: Boolean?,
     val openingHours: String?,
     val phone: String?,
-    val address: String?
+    val address: String?,
+    val latitude: Double?,
+    val longitude: Double?
 )
 
 data class Coach(

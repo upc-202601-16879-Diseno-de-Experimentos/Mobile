@@ -33,7 +33,17 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
-
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
+import androidx.compose.ui.viewinterop.AndroidView
+import org.osmdroid.config.Configuration
+import org.osmdroid.util.GeoPoint
+import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.Marker
 // Design System Tokens (Cálido y Acogedor)
 val WarmBackground = Color(0xFFFFF9F5)
 val Terracotta = Color(0xFFE07A5F)
@@ -104,6 +114,7 @@ fun formatFriendlyAvailability(availStr: String?): String {
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Configuration.getInstance().load(applicationContext, getSharedPreferences("osmdroid", android.content.Context.MODE_PRIVATE))
         setContent { 
             MaterialTheme(
                 colorScheme = lightColorScheme(
@@ -648,7 +659,41 @@ fun MatchPointApp() {
                 var courtSportType by remember { mutableStateOf("") }
                 var courtLocation by remember { mutableStateOf("") }
                 var selectedCourt by remember { mutableStateOf<Court?>(null) }
+                var selectedMapCourt by remember { mutableStateOf<Court?>(null) }
                 var loadingCourts by remember { mutableStateOf(true) }
+                
+                var isLocationSearchActive by remember { mutableStateOf(false) }
+                var userLat by remember { mutableStateOf<Double?>(null) }
+                var userLon by remember { mutableStateOf<Double?>(null) }
+                val context = LocalContext.current
+                val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
+
+                val locationPermissionLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.RequestMultiplePermissions()
+                ) { permissions ->
+                    val fineLocationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
+                    val coarseLocationGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
+                    if (fineLocationGranted || coarseLocationGranted) {
+                        try {
+                            fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, CancellationTokenSource().token).addOnSuccessListener { location ->
+                                if (location != null) {
+                                    userLat = location.latitude
+                                    userLon = location.longitude
+                                    isLocationSearchActive = true
+                                    scope.launch {
+                                        loadingCourts = true
+                                        allCourtsList = api.searchCourts(null, null, null, userLat, userLon)
+                                        loadingCourts = false
+                                    }
+                                } else {
+                                    android.widget.Toast.makeText(context, "Por favor enciende el GPS o configura la ubicación en tu emulador.", android.widget.Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        } catch (e: SecurityException) { }
+                    } else {
+                        android.widget.Toast.makeText(context, "Permiso de ubicación denegado.", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
 
                 var showBookingDialog by remember { mutableStateOf(false) }
 
@@ -674,7 +719,11 @@ fun MatchPointApp() {
                         }
                     } else {
                         loadingCourts = true
-                        allCourtsList = api.getCourts()
+                        if (isLocationSearchActive && userLat != null && userLon != null) {
+                            allCourtsList = api.searchCourts(null, null, null, userLat, userLon)
+                        } else {
+                            allCourtsList = api.getCourts()
+                        }
                         loadingCourts = false
                     }
                 }
@@ -782,7 +831,7 @@ fun MatchPointApp() {
                             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                         ) {
                             Column(modifier = Modifier.padding(12.dp)) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                     OutlinedTextField(
                                         value = courtSportType,
                                         onValueChange = { courtSportType = it },
@@ -797,6 +846,49 @@ fun MatchPointApp() {
                                         shape = InputShape,
                                         modifier = Modifier.weight(1f)
                                     )
+                                    IconButton(onClick = {
+                                        if (isLocationSearchActive) {
+                                            isLocationSearchActive = false
+                                            userLat = null
+                                            userLon = null
+                                            scope.launch {
+                                                loadingCourts = true
+                                                allCourtsList = api.getCourts()
+                                                loadingCourts = false
+                                            }
+                                        } else {
+                                            val hasPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+                                                                ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                                            if (hasPermission) {
+                                                try {
+                                                    fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, CancellationTokenSource().token).addOnSuccessListener { location ->
+                                                        if (location != null) {
+                                                            userLat = location.latitude
+                                                            userLon = location.longitude
+                                                            isLocationSearchActive = true
+                                                            scope.launch {
+                                                                loadingCourts = true
+                                                                allCourtsList = api.searchCourts(null, null, null, userLat, userLon)
+                                                                loadingCourts = false
+                                                            }
+                                                        } else {
+                                                            android.widget.Toast.makeText(context, "Por favor enciende el GPS o configura la ubicación en tu emulador.", android.widget.Toast.LENGTH_LONG).show()
+                                                        }
+                                                    }
+                                                } catch (e: SecurityException) { }
+                                            } else {
+                                                locationPermissionLauncher.launch(
+                                                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+                                                )
+                                            }
+                                        }
+                                    }, modifier = Modifier.padding(top = 8.dp)) {
+                                        Icon(
+                                            Icons.Default.Place, 
+                                            contentDescription = "Cerca de mí", 
+                                            tint = if (isLocationSearchActive) Terracotta else Color.Gray
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -806,8 +898,111 @@ fun MatchPointApp() {
                         } else if (filteredCourts.isEmpty()) {
                             Text("No se encontraron canchas.", color = Color.Gray, modifier = Modifier.padding(vertical = 16.dp))
                         } else {
-                            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                                filteredCourts.forEach { court ->
+                            if (isLocationSearchActive && userLat != null && userLon != null) {
+                                Box(modifier = Modifier.fillMaxWidth().weight(1f).padding(bottom = 16.dp)) {
+                                    Card(
+                                        modifier = Modifier.fillMaxSize(),
+                                        shape = CardShape,
+                                        colors = CardDefaults.cardColors(containerColor = WhiteSurface),
+                                        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+                                    ) {
+                                        AndroidView(
+                                            modifier = Modifier.fillMaxSize(),
+                                            factory = { ctx ->
+                                                MapView(ctx).apply {
+                                                    setTileSource(org.osmdroid.tileprovider.tilesource.TileSourceFactory.MAPNIK)
+                                                    setMultiTouchControls(true)
+                                                }
+                                            },
+                                            update = { mapView ->
+                                                mapView.controller.setZoom(15.5)
+                                                val userPoint = GeoPoint(userLat!!, userLon!!)
+                                                mapView.controller.setCenter(userPoint)
+                                                
+                                                mapView.overlays.clear()
+                                                val userMarker = Marker(mapView)
+                                                userMarker.position = userPoint
+                                                userMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                                                userMarker.title = "Mi Ubicación"
+                                                val userIcon = ContextCompat.getDrawable(mapView.context, android.R.drawable.ic_menu_mylocation)?.mutate()
+                                                userIcon?.setTint(android.graphics.Color.parseColor("#3D405B")) // NavyText color for distinction
+                                                userMarker.icon = userIcon
+                                                mapView.overlays.add(userMarker)
+
+                                                filteredCourts.forEach { court ->
+                                                    if (court.latitude != null && court.longitude != null) {
+                                                        val courtPoint = GeoPoint(court.latitude, court.longitude)
+                                                        val courtMarker = Marker(mapView)
+                                                        courtMarker.position = courtPoint
+                                                        courtMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                                                        courtMarker.title = court.name
+                                                        courtMarker.setOnMarkerClickListener { marker, _ ->
+                                                            selectedMapCourt = court
+                                                            true
+                                                        }
+                                                        mapView.overlays.add(courtMarker)
+                                                    }
+                                                }
+                                                mapView.invalidate()
+                                            }
+                                        )
+                                    }
+                                    
+                                    FloatingActionButton(
+                                        onClick = { selectedMapCourt = null },
+                                        modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+                                        containerColor = WhiteSurface,
+                                        contentColor = Terracotta,
+                                        shape = androidx.compose.foundation.shape.CircleShape
+                                    ) {
+                                        Icon(Icons.Default.Place, contentDescription = "Centrar Mapa")
+                                    }
+
+                                    androidx.compose.animation.AnimatedVisibility(
+                                        visible = selectedMapCourt != null,
+                                        modifier = Modifier.align(Alignment.BottomCenter).padding(horizontal = 16.dp, vertical = 24.dp),
+                                        enter = androidx.compose.animation.slideInVertically(initialOffsetY = { it }) + androidx.compose.animation.fadeIn(),
+                                        exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { it }) + androidx.compose.animation.fadeOut()
+                                    ) {
+                                        selectedMapCourt?.let { court ->
+                                            Card(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                shape = CardShape,
+                                                colors = CardDefaults.cardColors(containerColor = WhiteSurface),
+                                                elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
+                                            ) {
+                                                Column(modifier = Modifier.padding(20.dp)) {
+                                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                                        Column(modifier = Modifier.weight(1f)) {
+                                                            Text(court.name, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = NavyText)
+                                                            Text(court.location, fontSize = 14.sp, color = Color.Gray, modifier = Modifier.padding(top = 4.dp))
+                                                        }
+                                                        court.pricePerHour?.let {
+                                                            Text("$${it}/hr", fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, color = SoftGreen)
+                                                        }
+                                                    }
+                                                    Spacer(Modifier.height(16.dp))
+                                                    Button(
+                                                        onClick = {
+                                                            selectedCourt = court
+                                                            selectedService = null
+                                                            showBookingDialog = true
+                                                            selectedMapCourt = null
+                                                        },
+                                                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                                                        shape = ButtonShape,
+                                                        colors = ButtonDefaults.buttonColors(containerColor = Terracotta)
+                                                    ) {
+                                                        Text("RESERVAR CANCHA", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            } else {
+                                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                                    filteredCourts.forEach { court ->
                                     Card(
                                         modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
                                         shape = CardShape,
@@ -835,6 +1030,7 @@ fun MatchPointApp() {
                                 }
                             }
                         }
+                    }
                     }
                 }
 
