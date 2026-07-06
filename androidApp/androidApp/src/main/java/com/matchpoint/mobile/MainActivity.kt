@@ -170,7 +170,7 @@ fun MatchPointApp() {
                 val context = LocalContext.current
                 val gso = remember {
                     GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-                        .requestIdToken("203684276873-gfrrh4brb30rguelmebrvn279isg4k77.apps.googleusercontent.com")
+                        .requestIdToken("968308220445-mc7uaupeh9d4t53ckpjtsvbmemru1qdn.apps.googleusercontent.com")
                         .requestEmail()
                         .build()
                 }
